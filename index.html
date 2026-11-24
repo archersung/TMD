@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>彈簧振盪監測台</title>
+<style>
+  :root {
+    --bg: #E8E5DD;
+    --panel: #F7F5F0;
+    --ink: #1E2A30;
+    --muted: #6B7378;
+    --line: #CFCABE;
+    --trace-1: #2E7D6B;
+    --trace-2: #B5652B;
+    --focus: #1E2A30;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+    line-height: 1.6;
+    padding: 24px 16px 40px;
+  }
+  main { max-width: 960px; margin: 0 auto; display: grid; gap: 18px; }
+
+  header { border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+  h1 {
+    margin: 0;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    outline: none;
+    border-radius: 4px;
+    padding: 2px 6px;
+    margin-left: -6px;
+  }
+  h1:focus, input:focus-visible, button:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  .hint { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 16px 18px;
+  }
+  .panel h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; color: var(--muted); }
+
+  /* 監看視窗 */
+  .monitor-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .status { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  canvas#scope {
+    width: 100%;
+    height: 260px;
+    display: block;
+    margin-top: 10px;
+    background: #FBFAF7;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+  .legend { display: flex; gap: 16px; font-size: 13px; margin-top: 8px; flex-wrap: wrap; }
+  .legend span::before {
+    content: "";
+    display: inline-block;
+    width: 14px; height: 3px;
+    margin-right: 6px; vertical-align: middle;
+  }
+  .legend .l1::before { background: var(--trace-1); }
+  .legend .l2::before { background: var(--trace-2); }
+
+  /* 加速規 */
+  .sensors { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .sensor label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  .sensor input.name {
+    width: 100%;
+    font: inherit;
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--ink);
+    background: transparent;
+    border: none;
+    border-bottom: 1px dashed var(--line);
+    padding: 2px 0;
+  }
+  .reading {
+    font-size: 40px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    margin: 10px 0 0;
+    line-height: 1.1;
+  }
+  .reading small { font-size: 15px; font-weight: 400; color: var(--muted); margin-left: 4px; }
+  .bar { height: 6px; background: var(--line); border-radius: 3px; margin-top: 10px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0%; background: var(--trace-1); transition: width .08s linear; }
+  .sensor.b .bar > i { background: var(--trace-2); }
+  .sensor.b .reading { color: var(--trace-2); }
+  .sensor.a .reading { color: var(--trace-1); }
+
+  /* 控制區 */
+  .controls { display: grid; grid-template-columns: 1.4fr 1fr; gap: 18px; }
+  .control-row { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 6px; }
+  .control-row output { font-variant-numeric: tabular-nums; font-weight: 600; }
+  input[type=range] { width: 100%; accent-color: var(--trace-1); }
+  .scale { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+  .knob-wrap { display: flex; align-items: center; gap: 16px; }
+  #knob {
+    width: 120px; height: 120px;
+    flex: none;
+    cursor: grab;
+    touch-action: none;
+    border-radius: 50%;
+  }
+  #knob:active { cursor: grabbing; }
+  .knob-info { font-size: 14px; }
+  .knob-info output { display: block; font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--trace-2); }
+  .knob-info p { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+
+  .actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  button {
+    font: inherit;
+    font-size: 14px;
+    padding: 8px 16px;
+    border: 1px solid var(--ink);
+    background: var(--panel);
+    color: var(--ink);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  button:hover { background: var(--ink); color: var(--panel); }
+
+  @media (max-width: 640px) {
+    h1 { font-size: 22px; }
+    .sensors, .controls { grid-template-columns: 1fr; }
+    .reading { font-size: 34px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .bar > i { transition: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+  <header>
+    <h1 id="title" contenteditable="true" spellcheck="false" aria-label="實驗標題，可直接編輯">彈簧振盪與磁阻尼實驗</h1>
+    <p class="hint">點擊標題即可編輯，內容會自動保存在此瀏覽器中。</p>
+  </header>
+
+  <!-- 監看視窗 -->
+  <section class="panel" aria-label="監看視窗">
+    <div class="monitor-head">
+      <h2>監看視窗</h2>
+      <div class="status" id="status">狀態：執行中</div>
+    </div>
+    <canvas id="scope" aria-label="加速度時間曲線"></canvas>
+    <div class="legend">
+      <span class="l1" id="legend1">加速規 A</span>
+      <span class="l2" id="legend2">加速規 B</span>
+    </div>
+  </section>
+
+  <!-- 加速規讀值 -->
+  <section class="sensors" aria-label="加速規讀值">
+    <article class="panel sensor a">
+      <label for="name1">加速規名稱</label>
+      <input class="name" id="name1" value="加速規 A" maxlength="20">
+      <p class="reading"><span id="val1">0.00</span><small>m/s²</small></p>
+      <div class="bar"><i id="bar1"></i></div>
+    </article>
+    <article class="panel sensor b">
+      <label for="name2">加速規名稱</label>
+      <input class="name" id="name2" value="加速規 B" maxlength="20">
+      <p class="reading"><span id="val2">0.00</span><small>m/s²</small></p>
+      <div class="bar"><i id="bar2"></i></div>
+    </article>
+  </section>
+
+  <!-- 控制 -->
+  <section class="controls" aria-label="實驗參數">
+    <div class="panel">
+      <h2>彈簧長度</h2>
+      <div class="control-row">
+        <span>拉條調整</span>
+        <output id="lenVal">20.0 cm</output>
+      </div>
+      <input type="range" id="length" min="10" max="30" step="0.5" value="20" aria-label="彈簧長度">
+      <div class="scale"><span>10 cm</span><span>30 cm</span></div>
+      <p class="hint" id="freqInfo"></p>
+    </div>
+
+    <div class="panel">
+      <h2>磁阻尼片 d 距離</h2>
+      <div class="knob-wrap">
+        <svg id="knob" viewBox="0 0 120 120" role="slider" tabindex="0"
+             aria-label="磁阻尼片距離" aria-valuemin="0" aria-valuemax="40" aria-valuenow="10">
+          <circle cx="60" cy="60" r="56" fill="#EFEBE3" stroke="#B9B3A6" stroke-width="2"/>
+          <circle cx="60" cy="60" r="44" fill="#F7F5F0" stroke="#D5CFC3" stroke-width="1"/>
+          <!-- 刻度 -->
+          <g id="ticks" stroke="#8A8F93" stroke-width="1.5"></g>
+          <g id="knobInd" transform="rotate(-135 60 60)">
+            <line x1="60" y1="60" x2="60" y2="22" stroke="#B5652B" stroke-width="4" stroke-linecap="round"/>
+            <circle cx="60" cy="60" r="6" fill="#1E2A30"/>
+          </g>
+        </svg>
+        <div class="knob-info">
+          <output id="dVal">10.0 mm</output>
+          <p>拖曳旋鈕或使用方向鍵調整<br>（範圍 0 – 40 mm）</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="actions">
+    <button id="toggle" type="button">暫停</button>
+    <button id="release" type="button">重新施加初位移</button>
+  </div>
+
+</main>
+
+<script>
+(() => {
+  // ===== 參數與狀態 =====
+  const MASS = 0.2;          // 質量 kg
+  const X0 = 0.02;           // 初位移 m
+  const state = { x: X0, v: 0, t: 0, running: true, L: 20, d: 10 };
+  const history = [];        // {t, a1, a2}
+  const WINDOW = 8;          // 監看視窗顯示秒數
+
+  const $ = id => document.getElementById(id);
+
+  function springK(L) { return 40 * (20 / L); }                    // 彈簧常數 N/m（越短越硬）
+  function dampB(d)   { return 0.05 + 1.2 * Math.exp(-d / 10); }   // 阻尼係數：磁片越近阻尼越大
+
+  function accel() {
+    const k = springK(state.L), b = dampB(state.d);
+    return (-k * state.x - b * state.v) / MASS;
+  }
+
+  function integrate(dt) {
+    const a = accel();
+    state.v += a * dt;
+    state.x += state.v * dt;
+    state.t += dt;
+  }
+
+  // ===== 讀值 =====
+  const bar1 = $('bar1'), bar2 = $('bar2');
+  const v1 = $('val1'), v2 = $('val2');
+  let acc1 = 0, acc2 = 0;
+
+  // ===== 監看視窗繪圖 =====
+  const canvas = $('scope'), ctx = canvas.getContext('2d');
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function draw() {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    ctx.clearRect(0, 0, w, h);
+    const t1 = state.t, t0 = t1 - WINDOW;
+    const recent = history.filter(p => p.t >= t0);
+    let maxAbs = 5;
+    recent.forEach(p => { maxAbs = Math.max(maxAbs, Math.abs(p.a1), Math.abs(p.a2)); });
+    const yMax = maxAbs * 1.1;
+
+    // 格線
+    ctx.strokeStyle = '#E3DED3';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 1; i < 4; i++) {
+      const y = (h / 4) * i;
+      ctx.moveTo(0, y); ctx.lineTo(w, y);
+    }
+    for (let i = 1; i < WINDOW; i++) {
+      const x = (w / WINDOW) * i;
+      ctx.moveTo(x, 0); ctx.lineTo(x, h);
+    }
+    ctx.stroke();
+
+    // 零線
+    ctx.strokeStyle = '#B9B3A6';
+    ctx.beginPath();
+    ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2);
+    ctx.stroke();
+
+    const toX = t => ((t - t0) / WINDOW) * w;
+    const toY = a => h / 2 - (a / yMax) * (h / 2 - 8);
+
+    [['a1', '#2E7D6B'], ['a2', '#B5652B']].forEach(([key, color]) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      recent.forEach((p, i) => {
+        const x = toX(p.t), y = toY(p[key]);
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    });
+
+    // 刻度文字
+    ctx.fillStyle = '#6B7378';
+    ctx.font = '12px system-ui, sans-serif';
+    ctx.fillText(`±${yMax.toFixed(1)} m/s²`, 8, 14);
+    ctx.fillText(`${t1.toFixed(1)} s`, w - 42, h - 8);
+  }
+
+  // ===== 更新顯示 =====
+  function updateReadouts() {
+    v1.textContent = acc1.toFixed(2);
+    v2.textContent = acc2.toFixed(2);
+    const pct = Math.min(100, Math.abs(acc1) / 20 * 100);
+    const pct2 = Math.min(100, Math.abs(acc2) / 20 * 100);
+    bar1.style.width = pct + '%';
+    bar2.style.width = pct2 + '%';
+
+    const k = springK(state.L);
+    const f = Math.sqrt(k / MASS) / (2 * Math.PI);
+    const zeta = dampB(state.d) / (2 * Math.sqrt(k * MASS));
+    $('freqInfo').textContent = `估計頻率 ${f.toFixed(2)} Hz，阻尼比 ζ ≈ ${zeta.toFixed(3)}`;
+  }
+
+  // ===== 動畫迴圈 =====
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min((now - last) / 1000, 0.05);
+    last = now;
+    if (state.running) {
+      const n = Math.max(1, Math.ceil(dt / 0.001));
+      const h = dt / n;
+      for (let i = 0; i < n; i++) integrate(h);
+    }
+    acc1 = accel();
+    // 加速規 B 裝在彈簧支架上：讀值為 A 的一部分並加入微小雜訊
+    acc2 = acc1 * 0.4 + (Math.random() - 0.5) * 0.05;
+
+    history.push({ t: state.t, a1: acc1, a2: acc2 });
+    while (history.length && history[0].t < state.t - WINDOW - 0.5) history.shift();
+
+    draw();
+    updateReadouts();
+    requestAnimationFrame(frame);
+  }
+
+  // ===== 彈簧長度拉條 =====
+  const lenSlider = $('length');
+  lenSlider.addEventListener('input', () => {
+    state.L = parseFloat(lenSlider.value);
+    $('lenVal').textContent = state.L.toFixed(1) + ' cm';
+    save();
+  });
+
+  // ===== 磁阻尼片旋鈕 =====
+  const knob = $('knob'), knobInd = $('knobInd');
+  const MIN_D = 0, MAX_D = 40, MIN_A = -135, MAX_A = 135;
+
+  // 建立刻度
+  const ticks = $('ticks');
+  for (let i = 0; i <= 8; i++) {
+    const ang = (MIN_A + (i / 8) * (MAX_A - MIN_A)) * Math.PI / 180;
+    const r1 = 48, r2 = 40;
+    const x1 = 60 + r1 * Math.sin(ang), y1 = 60 - r1 * Math.cos(ang);
+    const x2 = 60 + r2 * Math.sin(ang), y2 = 60 - r2 * Math.cos(ang);
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+    line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+    ticks.appendChild(line);
+  }
+
+  function setD(mm) {
+    state.d = Math.min(MAX_D, Math.max(MIN_D, mm));
+    const ang = MIN_A + (state.d - MIN_D) / (MAX_D - MIN_D) * (MAX_A - MIN_A);
+    knobInd.setAttribute('transform', `rotate(${ang} 60 60)`);
+    $('dVal').textContent = state.d.toFixed(1) + ' mm';
+    knob.setAttribute('aria-valuenow', state.d.toFixed(1));
+    save();
+  }
+
+  function angleFromPointer(e) {
+    const rect = knob.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+    let ang = Math.atan2(e.clientX - cx, -(e.clientY - cy)) * 180 / Math.PI; // 0° 朝上，順時針為正
+    if (ang > MAX_A) {
+      // 落在下方缺口，靠近哪一端就吸附到哪一端
+      ang = (ang - MAX_A) <= (225 - ang) ? MAX_A : MIN_A;
+    } else if (ang < MIN_A) {
+      ang = (MIN_A - ang) <= (ang + 225) ? MIN_A : MAX_A;
+    }
+    return ang;
+  }
+
+  let dragging = false;
+  knob.addEventListener('pointerdown', e => {
+    dragging = true;
+    knob.setPointerCapture(e.pointerId);
+    const ang = angleFromPointer(e);
+    setD(MIN_D + (ang - MIN_A) / (MAX_A - MIN_A) * (MAX_D - MIN_D));
+  });
+  knob.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    const ang = angleFromPointer(e);
+    setD(MIN_D + (ang - MIN_A) / (MAX_A - MIN_A) * (MAX_D - MIN_D));
+  });
+  ['pointerup', 'pointercancel'].forEach(t => knob.addEventListener(t, () => dragging = false));
+
+  knob.addEventListener('keydown', e => {
+    const step = e.shiftKey ? 5 : 0.5;
+    if (['ArrowUp', 'ArrowRight'].includes(e.key)) { setD(state.d + step); e.preventDefault(); }
+    if (['ArrowDown', 'ArrowLeft'].includes(e.key)) { setD(state.d - step); e.preventDefault(); }
+  });
+
+  // ===== 按鈕 =====
+  const toggleBtn = $('toggle');
+  toggleBtn.addEventListener('click', () => {
+    state.running = !state.running;
+    toggleBtn.textContent = state.running ? '暫停' : '繼續';
+    $('status').textContent = '狀態：' + (state.running ? '執行中' : '已暫停');
+  });
+  $('release').addEventListener('click', () => {
+    state.x = X0; state.v = 0;
+    state.running = true;
+    toggleBtn.textContent = '暫停';
+    $('status').textContent = '狀態：執行中';
+  });
+
+  // ===== 名稱與標題：編輯後保存 =====
+  const title = $('title');
+  const name1 = $('name1'), name2 = $('name2');
+  const KEY = 'spring-lab-v1';
+
+  function save() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify({
+        title: title.textContent,
+        name1: name1.value,
+        name2: name2.value,
+        L: state.L,
+        d: state.d
+      }));
+    } catch (_) { /* 無法保存時忽略 */ }
+  }
+
+  function load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(KEY) || 'null');
+      if (!s) return;
+      if (s.title) title.textContent = s.title;
+      if (s.name1) name1.value = s.name1;
+      if (s.name2) name2.value = s.name2;
+      if (typeof s.L === 'number') { state.L = s.L; lenSlider.value = s.L; $('lenVal').textContent = s.L.toFixed(1) + ' cm'; }
+      if (typeof s.d === 'number') setD(s.d);
+    } catch (_) { /* 忽略損毀的資料 */ }
+  }
+
+  function syncLegend() {
+    $('legend1').textContent = name1.value || '加速規 A';
+    $('legend2').textContent = name2.value || '加速規 B';
+  }
+
+  title.addEventListener('input', save);
+  title.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); title.blur(); } });
+  title.addEventListener('paste', e => {
+    e.preventDefault();
+    document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
+  });
+  [name1, name2].forEach(input => input.addEventListener('input', () => { syncLegend(); save(); }));
+
+  load();
+  syncLegend();
+  lenSlider.dispatchEvent(new Event('input'));
+  setD(state.d);
+  resize();
+  window.addEventListener('resize', resize);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
